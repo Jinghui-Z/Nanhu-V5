@@ -202,7 +202,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       when(isVsetSimple) {
         // Default
         // uop0 set rd, never flushPipe
-        csBundle(0).fuType := FuType.vsetiwi.U
+        csBundle(0).fuType := FuType.vsetiwi.id.U
         csBundle(0).flushPipe := Mux(VSETOpType.isVsetvl(latchedInst.fuOpType), true.B, vstartReg =/= 0.U)
         csBundle(0).blockBackward := false.B
         csBundle(0).rfWen := true.B
@@ -218,7 +218,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
           csBundle(0).fpWen := false.B
           csBundle(0).vecWen := false.B
           csBundle(0).vlWen := false.B
-          csBundle(1).fuType := FuType.vsetfwf.U
+          csBundle(1).fuType := FuType.vsetfwf.id.U
           csBundle(1).srcType(0) := SrcType.no
           csBundle(1).srcType(2) := SrcType.no
           csBundle(1).srcType(3) := SrcType.no
@@ -231,14 +231,14 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
           csBundle(0).lsrc(0) := src2
           csBundle(0).lsrc(1) := 0.U
           csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-          csBundle(0).fuType := FuType.i2v.U
+          csBundle(0).fuType := FuType.i2v.id.U
           csBundle(0).fuOpType := Cat(IF2VectorType.i2Vec(2, 0), e64)
           csBundle(0).rfWen := false.B
           csBundle(0).fpWen := false.B
           csBundle(0).vecWen := true.B
           csBundle(0).vlWen := false.B
           // uop1: uvsetvcfg_vv
-          csBundle(1).fuType := FuType.vsetfwf.U
+          csBundle(1).fuType := FuType.vsetfwf.id.U
           // vl
           csBundle(1).srcType(0) := SrcType.no
           csBundle(1).srcType(2) := SrcType.no
@@ -261,12 +261,12 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
           // because vsetvl may modified src2 when src2 == rd,
           // we need to modify vd in second uop to avoid dependency
           // uop0 set vl
-          csBundle(0).fuType := FuType.vsetiwf.U
+          csBundle(0).fuType := FuType.vsetiwf.id.U
           csBundle(0).ldest := Vl_IDX.U
           csBundle(0).rfWen := false.B
           csBundle(0).vlWen := true.B
           // uop1 set rd
-          csBundle(1).fuType := FuType.vsetiwi.U
+          csBundle(1).fuType := FuType.vsetiwi.id.U
           csBundle(1).ldest := dest
           csBundle(1).rfWen := true.B
           csBundle(1).vlWen := false.B
@@ -294,7 +294,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.f2v.U
+      csBundle(0).fuType := FuType.f2v.id.U
       csBundle(0).fuOpType := Cat(IF2VectorType.fDup2Vec(2, 0), vsewReg)
       csBundle(0).vecWen := true.B
       csBundle(0).vpu.isReverse := false.B
@@ -359,7 +359,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := Mux(src1IsFp, FuType.f2v.U, FuType.i2v.U)
+      csBundle(0).fuType := Mux(src1IsFp, FuType.f2v.id.U, FuType.i2v.id.U)
       csBundle(0).fuOpType := Cat(Mux(src1IsFp, IF2VectorType.fDup2Vec(2, 0), IF2VectorType.i2Vec(2, 0)), vsewReg)
       csBundle(0).rfWen := false.B
       csBundle(0).fpWen := false.B
@@ -388,7 +388,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.i2v.U
+      csBundle(0).fuType := FuType.i2v.id.U
       csBundle(0).fuOpType := Cat(Mux(src1IsImm, IF2VectorType.immDup2Vec(2, 0), IF2VectorType.iDup2Vec(2, 0)), vsewReg)
       csBundle(0).vecWen := true.B
       csBundle(0).vpu.isReverse := false.B
@@ -427,7 +427,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.f2v.U
+      csBundle(0).fuType := FuType.f2v.id.U
       csBundle(0).fuOpType := Cat(IF2VectorType.fDup2Vec(2, 0), vsewReg)
       csBundle(0).rfWen := false.B
       csBundle(0).fpWen := false.B
@@ -471,7 +471,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.i2v.U
+      csBundle(0).fuType := FuType.i2v.id.U
       csBundle(0).fuOpType := Cat(Mux(src1IsImm, IF2VectorType.immDup2Vec(2, 0), IF2VectorType.iDup2Vec(2, 0)), vsewReg)
       csBundle(0).vecWen := true.B
 
@@ -499,7 +499,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.i2v.U
+      csBundle(0).fuType := FuType.i2v.id.U
       csBundle(0).fuOpType := Cat(IF2VectorType.iDup2Vec(2, 0), vsewReg)
       csBundle(0).vecWen := true.B
 
@@ -542,7 +542,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.f2v.U
+      csBundle(0).fuType := FuType.f2v.id.U
       csBundle(0).fuOpType := Cat(IF2VectorType.fDup2Vec(2, 0), vsewReg)
       csBundle(0).rfWen := false.B
       csBundle(0).fpWen := false.B
@@ -572,7 +572,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.i2v.U
+      csBundle(0).fuType := FuType.i2v.id.U
       csBundle(0).fuOpType := Cat(Mux(src1IsImm, IF2VectorType.immDup2Vec(2, 0), IF2VectorType.iDup2Vec(2, 0)), vsewReg)
       csBundle(0).vecWen := true.B
 
@@ -612,7 +612,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.f2v.U
+      csBundle(0).fuType := FuType.f2v.id.U
       csBundle(0).fuOpType := Cat(IF2VectorType.fDup2Vec(2, 0), vsewReg)
       csBundle(0).rfWen := false.B
       csBundle(0).fpWen := false.B
@@ -642,7 +642,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.i2v.U
+      csBundle(0).fuType := FuType.i2v.id.U
       csBundle(0).fuOpType := Cat(Mux(src1IsImm, IF2VectorType.immDup2Vec(2, 0), IF2VectorType.iDup2Vec(2, 0)), vsewReg)
       csBundle(0).vecWen := true.B
       //LMUL
@@ -670,7 +670,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.i2v.U
+      csBundle(0).fuType := FuType.i2v.id.U
       csBundle(0).fuOpType := Cat(IF2VectorType.iDup2Vec(2, 0), vsewReg)
       csBundle(0).vecWen := true.B
       //LMUL
@@ -697,7 +697,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.f2v.U
+      csBundle(0).fuType := FuType.f2v.id.U
       csBundle(0).fuOpType := Cat(IF2VectorType.fDup2Vec(2, 0), vsewReg)
       csBundle(0).rfWen := false.B
       csBundle(0).fpWen := false.B
@@ -727,7 +727,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.i2v.U
+      csBundle(0).fuType := FuType.i2v.id.U
       csBundle(0).fuOpType := Cat(IF2VectorType.iDup2Vec(2, 0), vsewReg)
       csBundle(0).vecWen := true.B
       //LMUL
@@ -761,7 +761,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.f2v.U
+      csBundle(0).fuType := FuType.f2v.id.U
       csBundle(0).fuOpType := Cat(IF2VectorType.fDup2Vec(2, 0), vsewReg)
       csBundle(0).rfWen := false.B
       csBundle(0).fpWen := false.B
@@ -1325,7 +1325,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.i2v.U
+      csBundle(0).fuType := FuType.i2v.id.U
       csBundle(0).fuOpType := Cat(Mux(src1IsImm, IF2VectorType.imm2Vec(2, 0), IF2VectorType.i2Vec(2, 0)), vsewReg)
       csBundle(0).vecWen := true.B
       // LMUL
@@ -1353,7 +1353,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.i2v.U
+      csBundle(0).fuType := FuType.i2v.id.U
       csBundle(0).fuOpType := Cat(Mux(src1IsImm, IF2VectorType.imm2Vec(2, 0), IF2VectorType.i2Vec(2, 0)), vsewReg)
       csBundle(0).vecWen := true.B
       // LMUL
@@ -1492,7 +1492,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(2) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.i2v.U
+      csBundle(0).fuType := FuType.i2v.id.U
       csBundle(0).fuOpType := Cat(Mux(src1IsImm, IF2VectorType.imm2Vec(2, 0), IF2VectorType.i2Vec(2, 0)), vsewReg)
       csBundle(0).rfWen := false.B
       csBundle(0).fpWen := false.B
@@ -1665,7 +1665,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(1) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.i2v.U
+      csBundle(0).fuType := FuType.i2v.id.U
       csBundle(0).fuOpType := Cat(IF2VectorType.i2Vec(2, 0), e64)
       csBundle(0).rfWen := false.B
       csBundle(0).fpWen := false.B
@@ -1688,7 +1688,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(1) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.i2v.U
+      csBundle(0).fuType := FuType.i2v.id.U
       csBundle(0).fuOpType := Cat(IF2VectorType.i2Vec(2, 0), e64)
       csBundle(0).rfWen := false.B
       csBundle(0).fpWen := false.B
@@ -1725,7 +1725,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(1) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.i2v.U
+      csBundle(0).fuType := FuType.i2v.id.U
       csBundle(0).fuOpType := Cat(IF2VectorType.i2Vec(2, 0), e64)
       csBundle(0).rfWen := false.B
       csBundle(0).fpWen := false.B
@@ -1737,7 +1737,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(1).lsrc(0) := latchedInst.lsrc(1)
       csBundle(1).lsrc(1) := 0.U
       csBundle(1).ldest := (VECTOR_TMP_REG_LMUL + 1).U
-      csBundle(1).fuType := FuType.i2v.U
+      csBundle(1).fuType := FuType.i2v.id.U
       csBundle(1).fuOpType := Cat(IF2VectorType.i2Vec(2, 0), e64)
       csBundle(1).rfWen := false.B
       csBundle(1).fpWen := false.B
@@ -1803,7 +1803,7 @@ class DecodeUnitComp()(implicit p : Parameters) extends XSModule with DecodeUnit
       csBundle(0).srcType(1) := SrcType.imm
       csBundle(0).lsrc(1) := 0.U
       csBundle(0).ldest := VECTOR_TMP_REG_LMUL.U
-      csBundle(0).fuType := FuType.i2v.U
+      csBundle(0).fuType := FuType.i2v.id.U
       csBundle(0).fuOpType := Cat(IF2VectorType.i2Vec(2, 0), e64)
       csBundle(0).rfWen := false.B
       csBundle(0).fpWen := false.B
