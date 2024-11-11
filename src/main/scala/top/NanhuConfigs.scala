@@ -20,6 +20,7 @@ package top
 import xiangshan._
 import org.chipsalliance.cde.config._
 import xiangshan.backend.regfile.{IntPregParams, FpPregParams, VfPregParams}
+import xiangshan.backend.dispatch.DispatchParameters
 import xiangshan.cache.DCacheParameters
 import xiangshan.cache.mmu.{L2TLBParameters, TLBParameters}
 import device.{EnableJtag, XSDebugModuleParams}
@@ -147,6 +148,17 @@ class WithNanhuV5_3Config extends Config((site, here, up) =>{
     StoreQueueSize = 32,            // Default: 64
     StoreBufferSize = 8,            // Default: 16
     LoadPipelineWidth = 2,          // Default: 3
+
+    dpParams = DispatchParameters(
+      IntDqSize = 8,
+      FpDqSize = 8,
+      VecDqSize = 8,
+      LsDqSize = 8,
+      IntDqDeqWidth = 4,
+      FpDqDeqWidth = 6,
+      VecDqDeqWidth = 6,
+      LsDqDeqWidth = 6
+    ),
 
     l2tlbParameters = L2TLBParameters(
       name = "l2tlb",

@@ -241,8 +241,6 @@ class BackendInlinedImp(override val wrapper: BackendInlined)(implicit p: Parame
   private val vlFromVfIsZero = vfExuBlock.io.vlIsZero.get
   private val vlFromVfIsVlmax = vfExuBlock.io.vlIsVlmax.get
 
-  ctrlBlock.io.intIQValidNumVec := intScheduler.io.intIQValidNumVec
-  ctrlBlock.io.fpIQValidNumVec := fpScheduler.io.fpIQValidNumVec
   ctrlBlock.io.fromTop.hartId := io.fromTop.hartId
   ctrlBlock.io.frontend <> io.frontend
   ctrlBlock.io.fromCSR.toDecode := intExuBlock.io.csrToDecode.get

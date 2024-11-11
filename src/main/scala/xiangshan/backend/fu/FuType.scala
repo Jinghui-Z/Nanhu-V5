@@ -72,52 +72,7 @@ object FuType extends OHEnumeration {
   val vsegstu = addType(name = "vsegstu")
 
   val intArithAll = Seq(jmp, brh, i2f, i2v, csr, alu, mul, div, fence, bku)
-  // dq0 includes int's iq0 and iq1
-  // dq1 includes int's iq2 and iq3
-  def dq0OHTypeSeq(implicit p: Parameters): Seq[Seq[OHType]] = {
-    val intIQParams = p(XSCoreParamsKey).backendParams.intSchdParams.get.issueBlockParams
-    val dq0IQNums = intIQParams.size / 2
-    val iqParams = intIQParams.take(dq0IQNums)
-    val exuParams = iqParams.map(_.exuBlockParams).flatten
-    exuParams.map(_.fuConfigs.map(_.fuType))
-  }
-  def dq1OHTypeSeq(implicit p: Parameters): Seq[Seq[OHType]] = {
-    val intIQParams = p(XSCoreParamsKey).backendParams.intSchdParams.get.issueBlockParams
-    val dq0IQNums = intIQParams.size / 2
-    val iqParams = intIQParams.slice(dq0IQNums,intIQParams.size)
-    val exuParams = iqParams.map(_.exuBlockParams).flatten
-    exuParams.map(_.fuConfigs.map(_.fuType))
-  }
-  def intDq0All(implicit p: Parameters): Seq[OHType] = {
-    dq0OHTypeSeq.flatten.distinct
-  }
-  def intDq0Deq0(implicit p: Parameters): Seq[OHType] = {
-    val fuTypes = dq0OHTypeSeq(p)(0) ++ dq0OHTypeSeq(p)(2)
-    fuTypes.distinct
-  }
-  def intDq0Deq1(implicit p: Parameters): Seq[OHType] = {
-    val fuTypes = dq0OHTypeSeq(p)(1) ++ dq0OHTypeSeq(p)(3)
-    fuTypes.distinct
-  }
-  def intDq1All(implicit p: Parameters): Seq[OHType] = {
-    dq1OHTypeSeq.flatten.distinct
-  }
-  def intDq1Deq0(implicit p: Parameters): Seq[OHType] = {
-    val fuTypes = dq1OHTypeSeq(p)(0) ++ dq1OHTypeSeq(p)(2)
-    fuTypes.distinct
-  }
-  def intDq1Deq1(implicit p: Parameters): Seq[OHType] = {
-    val fuTypes = dq1OHTypeSeq(p)(1) ++ dq1OHTypeSeq(p)(3)
-    fuTypes.distinct
-  }
-  def intBothDeq0(implicit p: Parameters): Seq[OHType] = {
-    val fuTypes = dq0OHTypeSeq(p)(0).intersect(dq0OHTypeSeq(p)(2)).intersect(dq1OHTypeSeq(p)(0)).intersect(dq1OHTypeSeq(p)(2))
-    fuTypes.distinct
-  }
-  def intBothDeq1(implicit p: Parameters): Seq[OHType] = {
-    val fuTypes = dq0OHTypeSeq(p)(1).intersect(dq0OHTypeSeq(p)(3)).intersect(dq1OHTypeSeq(p)(1)).intersect(dq1OHTypeSeq(p)(3))
-    fuTypes.distinct
-  }
+
   def is0latency(fuType: UInt): Bool = {
     val fuTypes = FuConfig.allConfigs.filter(_.latency == CertainLatency(0)).map(_.fuType)
     FuTypeOrR(fuType, fuTypes)
@@ -144,14 +99,6 @@ object FuType extends OHEnumeration {
   def apply() = UInt(num.W)
 
   def isInt(fuType: UInt): Bool = FuTypeOrR(fuType, intArithAll) || FuTypeOrR(fuType, vsetiwi, vsetiwf)
-  def isIntDq0(fuType: UInt)(implicit p: Parameters): Bool = FuTypeOrR(fuType, intDq0All)
-  def isIntDq1(fuType: UInt)(implicit p: Parameters): Bool = FuTypeOrR(fuType, intDq1All)
-  def isIntDq0Deq0(fuType: UInt)(implicit p: Parameters): Bool = FuTypeOrR(fuType, intDq0Deq0)
-  def isIntDq0Deq1(fuType: UInt)(implicit p: Parameters): Bool = FuTypeOrR(fuType, intDq0Deq1)
-  def isIntDq1Deq0(fuType: UInt)(implicit p: Parameters): Bool = FuTypeOrR(fuType, intDq1Deq0)
-  def isIntDq1Deq1(fuType: UInt)(implicit p: Parameters): Bool = FuTypeOrR(fuType, intDq1Deq1)
-  def isBothDeq0(fuType: UInt)(implicit p: Parameters): Bool = FuTypeOrR(fuType, intBothDeq0)
-  def isBothDeq1(fuType: UInt)(implicit p: Parameters): Bool = FuTypeOrR(fuType, intBothDeq1)
   def isAlu(fuType: UInt): Bool = FuTypeOrR(fuType, Seq(alu))
   def isBrh(fuType: UInt): Bool = FuTypeOrR(fuType, Seq(brh))
 

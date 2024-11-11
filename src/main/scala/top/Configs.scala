@@ -90,6 +90,7 @@ class MinimalConfig(n: Int = 1) extends Config(
         dpParams = DispatchParameters(
           IntDqSize = 12,
           FpDqSize = 12,
+          VecDqSize = 12,
           LsDqSize = 12,
           IntDqDeqWidth = 8,
           FpDqDeqWidth = 6,
