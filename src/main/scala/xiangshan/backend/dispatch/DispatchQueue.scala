@@ -38,6 +38,8 @@ class DispatchQueueIO(enqnum: Int, deqnum: Int, size: Int)(implicit p: Parameter
   val deq = Vec(deqnum, DecoupledIO(new DynInst))
   val redirect = Flipped(ValidIO(new Redirect))
   val dqFull = Output(Bool())
+  val validDeq0Num = Output(UInt(size.U.getWidth.W))
+  val validDeq1Num = Output(UInt(size.U.getWidth.W))
 }
 
 // dispatch queue: accepts at most enqnum uops from dispatch1 and dispatches deqnum uops at every clock cycle
@@ -57,6 +59,8 @@ class DispatchQueue(size: Int, enqnum: Int, deqnum: Int, dqIndex: Int = 0)(impli
   val stateEntries = RegInit(VecInit(Seq.fill(size)(s_invalid)))
   val validDeq0 = RegInit(VecInit(Seq.fill(size)(false.B)))
   val validDeq1 = RegInit(VecInit(Seq.fill(size)(false.B)))
+  io.validDeq0Num := PopCount(validDeq0.zip(stateEntries).map{case (v, s) => v && (s===s_valid)})
+  io.validDeq1Num := PopCount(validDeq1.zip(stateEntries).map{case (v, s) => v && (s===s_valid)})
 
   class DispatchQueuePtr extends CircularQueuePtr[DispatchQueuePtr](size)
 

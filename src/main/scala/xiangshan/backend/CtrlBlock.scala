@@ -75,7 +75,8 @@ class CtrlBlockImp(
   val rat = Module(new RenameTableWrapper)
   val rename = Module(new Rename)
   val dispatch = Module(new Dispatch)
-  val intDq0 = Module(new DispatchQueue(dpParams.IntDqSize, RenameWidth, dpParams.IntDqDeqWidth, dqIndex = 0))
+  val intDq0 = Module(new DispatchQueue(dpParams.IntDqSize, RenameWidth, dpParams.IntDqDeqWidth/2, dqIndex = 0))
+  val intDq1 = Module(new DispatchQueue(dpParams.IntDqSize, RenameWidth, dpParams.IntDqDeqWidth/2, dqIndex = 1))
   val fpDq = Module(new DispatchQueue(dpParams.FpDqSize, RenameWidth, dpParams.VecDqDeqWidth))
   val vecDq = Module(new DispatchQueue(dpParams.FpDqSize, RenameWidth, dpParams.VecDqDeqWidth))
   val lsDq = Module(new DispatchQueue(dpParams.LsDqSize, RenameWidth, dpParams.LsDqDeqWidth))
@@ -546,6 +547,12 @@ class CtrlBlockImp(
 
   // pipeline between rename and dispatch
   PipeGroupConnect(renameOut, dispatch.io.fromRename, s1_s3_redirect.valid, dispatch.io.toRenameAllFire, "renamePipeDispatch")
+  dispatch.io.intIQValidNumVec := io.intIQValidNumVec
+  dispatch.io.fpIQValidNumVec := io.fpIQValidNumVec
+  dispatch.io.fromIntDQ.intDQ0ValidDeq0Num := intDq0.io.validDeq0Num
+  dispatch.io.fromIntDQ.intDQ0ValidDeq1Num := intDq0.io.validDeq1Num
+  dispatch.io.fromIntDQ.intDQ1ValidDeq0Num := intDq1.io.validDeq0Num
+  dispatch.io.fromIntDQ.intDQ1ValidDeq1Num := intDq1.io.validDeq1Num
 
   dispatch.io.hartId := io.fromTop.hartId
   dispatch.io.redirect := s1_s3_redirect
@@ -561,6 +568,9 @@ class CtrlBlockImp(
   intDq0.io.enq <> dispatch.io.toIntDq
   intDq0.io.redirect <> s2_s4_redirect
 
+  intDq1.io.enq <> dispatch.io.toIntDq1
+  intDq1.io.redirect <> s2_s4_redirect
+
   fpDq.io.enq <> dispatch.io.toFpDq
   fpDq.io.redirect <> s2_s4_redirect
 
@@ -569,7 +579,7 @@ class CtrlBlockImp(
 
   lsDq.io.enq <> dispatch.io.toLsDq
   lsDq.io.redirect <> s2_s4_redirect
-  io.toIssueBlock.intUops <> intDq0.io.deq
+  io.toIssueBlock.intUops <> (intDq0.io.deq :++ intDq1.io.deq)
   io.toIssueBlock.fpUops <> fpDq.io.deq
   io.toIssueBlock.vfUops  <> vecDq.io.deq
   io.toIssueBlock.memUops <> lsDq.io.deq
@@ -696,6 +706,8 @@ class CtrlBlockIO()(implicit p: Parameters, params: BackendParams) extends XSBun
   val toCSR = new Bundle {
     val trapInstInfo = Output(ValidIO(new TrapInstInfo))
   }
+  val intIQValidNumVec = Input(MixedVec(params.genIntIQValidNumBundle))
+  val fpIQValidNumVec = Input(MixedVec(params.genFpIQValidNumBundle))
   val fromWB = new Bundle {
     val wbData = Flipped(MixedVec(params.genWrite2CtrlBundles))
   }
