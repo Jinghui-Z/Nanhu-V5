@@ -216,8 +216,8 @@ emu: sim-verilog
 emu-run: emu
 	$(MAKE) -C ./difftest emu-run SIM_TOP=SimTop DESIGN_DIR=$(NOOP_HOME) NUM_CORES=$(NUM_CORES) RTL_SUFFIX=$(RTL_SUFFIX)
 
-emu_with_dump:
-	$(MAKE) -C ./difftest emu SIM_TOP=SimTop DESIGN_DIR=$(NOOP_HOME) NUM_CORES=$(NUM_CORES) RTL_SUFFIX=$(RTL_SUFFIX) EMU_TRACE=vcd
+emu_with_dump: sim-verilog
+	$(MAKE) -C ./difftest emu SIM_TOP=SimTop DESIGN_DIR=$(NOOP_HOME) NUM_CORES=$(NUM_CORES) RTL_SUFFIX=$(RTL_SUFFIX) EMU_TRACE=vcd EMU_THREADS=16
 
 RANDOM = $(shell echo $$RANDOM)
 RUN_BIN_DIR ?= $(ABS_WORK_DIR)/ready-to-run
