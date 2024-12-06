@@ -472,7 +472,7 @@ class ICacheIO(implicit p: Parameters) extends ICacheBundle
   val fetch       = new ICacheMainPipeBundle
   val toIFU       = Output(Bool())
   val pmp         = Vec(2 * PortNumber, new ICachePMPBundle)
-  val itlb        = Vec(PortNumber, new TlbRequestIO)
+  val itlb        = Vec(2 * PortNumber, new TlbRequestIO)
   val perfInfo    = Output(new ICachePerfInfo)
   val error       = ValidIO(new L1CacheErrorInfo)
   /* CSR control signal */
@@ -480,6 +480,9 @@ class ICacheIO(implicit p: Parameters) extends ICacheBundle
   val csr_parity_enable = Input(Bool())
   val fencei      = Input(Bool())
   val flush       = Input(Bool())
+  val wayFlushS0    = Output(Bool())
+  val wayFlushS1    = Output(Bool())
+  val wayUpdate   = Output(Valid(new WayUpdateInfo))
 }
 
 class ICache()(implicit p: Parameters) extends LazyModule with HasICacheParameters {
@@ -580,12 +583,18 @@ class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParame
   mainPipe.io.csr_parity_enable := io.csr_parity_enable
   mainPipe.io.hartId            := io.hartId
   mainPipe.io.mshr.resp         := missUnit.io.fetch_resp
-  mainPipe.io.fetch.req         <> io.fetch.req
-  mainPipe.io.wayLookupRead     <> wayLookup.io.read
+  mainPipe.io.fetch.req           <> io.fetch.req
+  mainPipe.io.fetch.flushFromBpu  <> io.fetch.flushFromBpu
+  mainPipe.io.wayLookupRead       <> wayLookup.io.read
+  mainPipe.io.wayFlushS0          := wayLookup.io.wayFlushS0  
+  mainPipe.io.wayFlushS1          := wayLookup.io.wayFlushS1
 
   wayLookup.io.flush            := io.flush
   wayLookup.io.write            <> prefetcher.io.wayLookupWrite
+  wayLookup.io.predWrite        <> prefetcher.io.wayPredWrite
   wayLookup.io.update           := missUnit.io.fetch_resp
+  wayLookup.io.readFtqIdx       := mainPipe.io.readFtqIdx
+  wayLookup.io.flushFromBpu     := io.ftqPrefetch.flushFromBpu 
 
   replacer.io.touch   <> mainPipe.io.touch
   replacer.io.victim  <> missUnit.io.victim
@@ -597,10 +606,15 @@ class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParame
 
   io.itlb(0) <> prefetcher.io.itlb(0)
   io.itlb(1) <> prefetcher.io.itlb(1)
+  io.itlb(2) <> mainPipe.io.itlb(0)
+  io.itlb(3) <> mainPipe.io.itlb(1)
 
   //notify IFU that Icache pipeline is available
-  io.toIFU := mainPipe.io.fetch.req.ready
-  io.perfInfo := mainPipe.io.perfInfo
+  io.toIFU        := mainPipe.io.fetch.req.ready
+  io.perfInfo     := mainPipe.io.perfInfo
+  io.wayFlushS0   := wayLookup.io.wayFlushS0 
+  io.wayFlushS1   := wayLookup.io.wayFlushS1 
+  io.wayUpdate    := wayLookup.io.wayUpdate
 
   io.fetch.resp              <> mainPipe.io.fetch.resp
   io.fetch.topdownIcacheMiss := mainPipe.io.fetch.topdownIcacheMiss

@@ -83,6 +83,8 @@ class NewIFUIO(implicit p: Parameters) extends XSBundle {
   val iTLBInter        = new TlbRequestIO
   val pmp              = new ICachePMPBundle
   val mmioCommitRead   = new mmioCommitRead
+  val wayFlushS0         = Input(Bool())
+  val wayFlushS1         = Input(Bool())
 }
 
 // record the situation in which fallThruAddr falls into
@@ -259,8 +261,8 @@ class NewIFU(implicit p: Parameters) extends XSModule
   backend_redirect := fromFtq.redirect.valid
   f3_flush := backend_redirect || (wb_redirect && !f3_wb_not_flush)
   f2_flush := backend_redirect || mmio_redirect || wb_redirect
-  f1_flush := f2_flush || from_bpu_f1_flush
-  f0_flush := f1_flush || from_bpu_f0_flush
+  f1_flush := f2_flush || from_bpu_f1_flush || io.wayFlushS1
+  f0_flush := f1_flush || from_bpu_f0_flush || io.wayFlushS0
 
   val f1_ready, f2_ready, f3_ready         = WireInit(false.B)
 

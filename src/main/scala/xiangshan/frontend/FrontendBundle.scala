@@ -26,6 +26,7 @@ import xs.utils._
 import xs.utils.perf._
 import xiangshan.cache.mmu.TlbResp
 import xiangshan.backend.fu.PMPRespBundle
+import xiangshan.frontend.icache.ICacheParameters
 
 import scala.math._
 import java.util.ResourceBundle.Control
@@ -75,10 +76,12 @@ class FtqICacheInfo(implicit p: Parameters)extends XSBundle with HasICacheParame
   val startAddr           = UInt(VAddrBits.W)
   val nextlineStart       = UInt(VAddrBits.W)
   val ftqIdx              = new FtqPtr
+  val wayPred             = Vec(ICacheParameters().PortNumber, Valid(UInt(log2Up(ICacheParameters().nWays).W)))
   def crossCacheline =  startAddr(blockOffBits - 1) === 1.U
   def fromFtqPcBundle(b: Ftq_RF_Components) = {
     this.startAddr := b.startAddr
     this.nextlineStart := b.getPc(CacheLineHalfWord.U)
+    this.wayPred      := b.wayPred
     this
   }
 }
@@ -574,6 +577,9 @@ class FullBranchPrediction(val isNotS3: Boolean)(implicit p: Parameters) extends
 
   val predCycle = if (!env.FPGAPlatform) Some(UInt(64.W)) else None
 
+  // way prediction 
+  val wayPred       = Vec(ICacheParameters().PortNumber, Valid(UInt(log2Up(ICacheParameters().nWays).W)))
+
   def br_slot_valids = slot_valids.init
   def tail_slot_valid = slot_valids.last
 
@@ -676,6 +682,7 @@ class FullBranchPrediction(val isNotS3: Boolean)(implicit p: Parameters) extends
     last_may_be_rvi_call := entry.last_may_be_rvi_call
     is_br_sharing := entry.tailSlot.valid && entry.tailSlot.sharing
     predCycle.map(_ := GTimer())
+    wayPred        := entry.wayPred
 
     val startLower        = Cat(0.U(1.W),    pc(instOffsetBits+log2Ceil(PredictWidth)-1, instOffsetBits))
     val endLowerwithCarry = Cat(entry.carry, entry.pftAddr)

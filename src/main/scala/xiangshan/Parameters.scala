@@ -280,7 +280,7 @@ case class XSCoreParameters
     useDmode = false,
     NWays = 48,
   ),
-  itlbPortNum: Int = ICacheParameters().PortNumber + 1,
+  itlbPortNum: Int = 2 * ICacheParameters().PortNumber + 1,
   ipmpPortNum: Int = 2 * ICacheParameters().PortNumber + 1,
   ldtlbParameters: TLBParameters = TLBParameters(
     name = "ldtlb",

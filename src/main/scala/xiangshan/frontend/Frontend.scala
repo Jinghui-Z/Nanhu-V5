@@ -132,8 +132,9 @@ class FrontendInlinedImp (outer: FrontendInlined) extends LazyModuleImp(outer)
   ifu.io.pmp.resp <> pmp_check.last.resp
 
   val itlb = Module(new TLB(coreParams.itlbPortNum, nRespDups = 1,
-    Seq.fill(PortNumber)(false) ++ Seq(true), itlbParams))
-  itlb.io.requestor.take(PortNumber) zip icache.io.itlb foreach {case (a,b) => a <> b}
+    Seq.fill(2 * PortNumber)(false) ++ Seq(true), itlbParams))
+  (0 until 2 * PortNumber).foreach(i => itlb.io.requestor(i) <> icache.io.itlb(i))
+  // itlb.io.requestor.take(PortNumber) zip icache.io.itlb foreach {case (a,b) => a <> b}
   itlb.io.requestor.last <> ifu.io.iTLBInter // mmio may need re-tlb, blocked
   itlb.io.hartId := io.hartId
   itlb.io.base_connect(sfence, tlbCsr)
@@ -160,14 +161,20 @@ class FrontendInlinedImp (outer: FrontendInlined) extends LazyModuleImp(outer)
   //IFU-ICache
 
   icache.io.fetch.req <> ftq.io.toICache.req
+  icache.io.fetch.flushFromBpu <> ftq.io.toICache.flushFromBpu
   ftq.io.toICache.req.ready :=  ifu.io.ftqInter.fromFtq.req.ready && icache.io.fetch.req.ready
 
   ifu.io.icacheInter.resp <>    icache.io.fetch.resp
   ifu.io.icacheInter.icacheReady :=  icache.io.toIFU
   ifu.io.icacheInter.topdownIcacheMiss := icache.io.fetch.topdownIcacheMiss
   ifu.io.icacheInter.topdownItlbMiss := icache.io.fetch.topdownItlbMiss
+  ifu.io.wayFlushS0 := icache.io.wayFlushS0
+  ifu.io.wayFlushS1 := icache.io.wayFlushS1
   icache.io.stop := ifu.io.icacheStop
   icache.io.flush := ftq.io.icacheFlush
+  ftq.io.wayFlushS0 := icache.io.wayFlushS0
+  ftq.io.wayFlushS1 := icache.io.wayFlushS1
+  ftq.io.wayUpdate := icache.io.wayUpdate
 
   ifu.io.icachePerfInfo := icache.io.perfInfo
 

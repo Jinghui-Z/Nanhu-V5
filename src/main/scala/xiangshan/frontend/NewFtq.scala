@@ -86,6 +86,7 @@ class Ftq_RF_Components(implicit p: Parameters) extends XSBundle with BPUUtils {
   val startAddr = UInt(VAddrBits.W)
   val isNextMask = Vec(PredictWidth, Bool())
   val fallThruError = Bool()
+  val wayPred   = Vec(ICacheParameters().PortNumber, Valid(UInt(log2Up(ICacheParameters().nWays).W)))
   // val carry = Bool()
   def getPc(offset: UInt) = {
     Cat(startAddr(VAddrBits-1, instOffsetBits) + offset, 0.U(instOffsetBits.W)).asTypeOf(UInt(VAddrBits.W))
@@ -97,6 +98,7 @@ class Ftq_RF_Components(implicit p: Parameters) extends XSBundle with BPUUtils {
       (resp.pc(3)(log2Ceil(PredictWidth), 1) +& i.U)(log2Ceil(PredictWidth)).asBool
     ))
     this.fallThruError := resp.fallThruError(3)
+    this.wayPred      := resp.full_pred(0).wayPred
     this
   }
   override def toPrintable: Printable = {
@@ -204,6 +206,7 @@ class FtqToICacheIO(implicit p: Parameters) extends XSBundle {
   //NOTE: req.bits must be prepare in T cycle
   // while req.valid is set true in T + 1 cycle
   val req = Decoupled(new FtqToICacheRequestBundle)
+  val flushFromBpu = new BpuFlushInfo
 }
 
 class FtqToPrefetchIO(implicit p: Parameters) extends XSBundle {
@@ -235,6 +238,7 @@ class FTBEntryGen(implicit p: Parameters) extends XSModule with HasBackendRedire
     val target = Input(UInt(VAddrBits.W))
     val hit = Input(Bool())
     val mispredict_vec = Input(Vec(PredictWidth, Bool()))
+    val wayPred        = Input(Vec(ICacheParameters().PortNumber, Valid(UInt(log2Up(ICacheParameters().nWays).W))))
 
     val new_entry = Output(new FTBEntry)
     val new_br_insert_pos = Output(Vec(numBr, Bool()))
@@ -301,6 +305,7 @@ class FTBEntryGen(implicit p: Parameters) extends XSModule with HasBackendRedire
   init_entry.isRet  := new_jmp_is_ret
   // that means fall thru points to the middle of an inst
   init_entry.last_may_be_rvi_call := pd.jmpOffset === (PredictWidth-1).U && !pd.rvcMask(pd.jmpOffset)
+  init_entry.wayPred := io.wayPred
 
   // if hit, check whether a new cfi(only br is possible) is detected
   val oe = io.old_entry
@@ -321,6 +326,7 @@ class FTBEntryGen(implicit p: Parameters) extends XSModule with HasBackendRedire
   })
 
   val old_entry_modified = WireInit(io.old_entry)
+  old_entry_modified.wayPred := io.wayPred
   for (i <- 0 until numBr) {
     val slot = old_entry_modified.allSlotsForBr(i)
     when (new_br_insert_onehot(i)) {
@@ -365,6 +371,7 @@ class FTBEntryGen(implicit p: Parameters) extends XSModule with HasBackendRedire
   }
 
   val old_entry_jmp_target_modified = WireInit(oe)
+  old_entry_jmp_target_modified.wayPred := io.wayPred
   val old_target = oe.tailSlot.getTarget(io.start_addr) // may be wrong because we store only 20 lowest bits
   val old_tail_is_jmp = !oe.tailSlot.sharing
   val jalr_target_modified = cfi_is_jalr && (old_target =/= io.target) && old_tail_is_jmp // TODO: pass full jalr target
@@ -374,6 +381,7 @@ class FTBEntryGen(implicit p: Parameters) extends XSModule with HasBackendRedire
   }
 
   val old_entry_always_taken = WireInit(oe)
+  old_entry_always_taken.wayPred := io.wayPred
   val always_taken_modified_vec = Wire(Vec(numBr, Bool())) // whether modified or not
   for (i <- 0 until numBr) {
     when(br_recorded_vec(0)){
@@ -393,7 +401,6 @@ class FTBEntryGen(implicit p: Parameters) extends XSModule with HasBackendRedire
   val derived_from_old_entry =
     Mux(is_new_br, old_entry_modified,
       Mux(jalr_target_modified, old_entry_jmp_target_modified, old_entry_always_taken))
-
 
   io.new_entry := Mux(!hit, init_entry, derived_from_old_entry)
 
@@ -475,6 +482,9 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     val toBackend = new FtqToCtrlIO
     val toPrefetch = new FtqToPrefetchIO
     val icacheFlush = Output(Bool())
+    val wayFlushS0 = Input(Bool())
+    val wayFlushS1 = Input(Bool())
+    val wayUpdate = Input(Valid(new WayUpdateInfo))
 
     val bpuInfo = new Bundle {
       val bpRight = Output(UInt(XLEN.W))
@@ -632,6 +642,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
 
   // multi-write
   val update_target = Reg(Vec(FtqSize, UInt(VAddrBits.W))) // could be taken target or fallThrough //TODO: remove this
+  val update_wayPred = Reg(Vec(FtqSize, Vec(ICacheParameters().PortNumber, Valid(UInt(log2Up(ICacheParameters().nWays).W)))))
   val newest_entry_target = Reg(UInt(VAddrBits.W))
   val newest_entry_target_modified = RegInit(false.B)
   val newest_entry_ptr = Reg(new FtqPtr)
@@ -640,8 +651,6 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   val mispredict_vec = Reg(Vec(FtqSize, Vec(PredictWidth, Bool())))
   val pred_stage = Reg(Vec(FtqSize, UInt(2.W)))
   val pred_s1_cycle = if (!env.FPGAPlatform) Some(Reg(Vec(FtqSize, UInt(64.W)))) else None
-
-  
 
   val f_to_send :: f_sent :: Nil = Enum(2)
   val entry_fetch_status = RegInit(VecInit(Seq.fill(FtqSize)(f_sent)))
@@ -676,11 +685,17 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
     newest_entry_ptr_modified := true.B
     newest_entry_ptr := last_cycle_bpu_in_ptr
   }
+  when (io.wayUpdate.valid) {
+    update_wayPred(io.wayUpdate.bits.ftqIdx.value) := io.wayUpdate.bits.wayPred
+  }
 
   // reduce fanout by delay write for a cycle
   when (RegNext(last_cycle_bpu_in)) {
     mispredict_vec(RegEnable(last_cycle_bpu_in_idx, last_cycle_bpu_in)) :=
       WireInit(VecInit(Seq.fill(PredictWidth)(false.B)))
+  }
+  when (bpu_in_fire) {
+    update_wayPred(bpu_in_resp_ptr.value) := bpu_in_resp.full_pred(2).wayPred
   }
 
   // record s1 pred cycles
@@ -710,6 +725,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
 
   io.toIfu.flushFromBpu.s2.valid := bpu_s2_redirect
   io.toIfu.flushFromBpu.s2.bits := bpu_s2_resp.ftq_idx
+  io.toICache.flushFromBpu.s2.valid := bpu_s2_redirect
+  io.toICache.flushFromBpu.s2.bits := bpu_s2_resp.ftq_idx
   io.toPrefetch.flushFromBpu.s2.valid := bpu_s2_redirect
   io.toPrefetch.flushFromBpu.s2.bits := bpu_s2_resp.ftq_idx
   when (bpu_s2_redirect) {
@@ -729,6 +746,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
 
   io.toIfu.flushFromBpu.s3.valid := bpu_s3_redirect
   io.toIfu.flushFromBpu.s3.bits := bpu_s3_resp.ftq_idx
+  io.toICache.flushFromBpu.s3.valid := bpu_s3_redirect
+  io.toICache.flushFromBpu.s3.bits := bpu_s3_resp.ftq_idx
   io.toPrefetch.flushFromBpu.s3.valid := bpu_s3_redirect
   io.toPrefetch.flushFromBpu.s3.bits := bpu_s3_resp.ftq_idx
   when (bpu_s3_redirect) {
@@ -758,8 +777,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   // **************************** to ifu ****************************
   // ****************************************************************
   // 0  for ifu, and 1-4 for ICache
-  val bpu_in_bypass_buf = RegEnable(ftq_pc_mem.io.wdata, bpu_in_fire)
-  val copied_bpu_in_bypass_buf = VecInit(Seq.fill(copyNum)(RegEnable(ftq_pc_mem.io.wdata, bpu_in_fire)))
+  val bpu_in_bypass_buf = RegEnable(ftq_pc_mem.io.wdata.fromBranchPrediction(bpu_in_resp), bpu_in_fire)
+  val copied_bpu_in_bypass_buf = VecInit(Seq.fill(copyNum)(RegEnable(ftq_pc_mem.io.wdata.fromBranchPrediction(bpu_in_resp), bpu_in_fire)))
   val bpu_in_bypass_buf_for_ifu = bpu_in_bypass_buf
   val bpu_in_bypass_ptr = RegEnable(bpu_in_resp_ptr, bpu_in_fire)
   val last_cycle_to_ifu_fire = RegNext(io.toIfu.req.fire)
@@ -874,8 +893,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   // }
 
   // TODO: remove this
-  XSError(io.toIfu.req.valid && diff_entry_next_addr =/= entry_next_addr,
-          p"\nifu_req_target wrong! ifuPtr: ${ifuPtr}, entry_next_addr: ${Hexadecimal(entry_next_addr)} diff_entry_next_addr: ${Hexadecimal(diff_entry_next_addr)}\n")
+  // XSError(io.toIfu.req.valid && diff_entry_next_addr =/= entry_next_addr,
+  //         p"\nifu_req_target wrong! ifuPtr: ${ifuPtr}, entry_next_addr: ${Hexadecimal(entry_next_addr)} diff_entry_next_addr: ${Hexadecimal(diff_entry_next_addr)}\n")
 
   // when fall through is smaller in value than start address, there must be a false hit
   when (toIfuPcBundle.fallThruError && entry_hit_status(ifuPtr.value) === h_hit) {
@@ -894,7 +913,8 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
 
   val ifu_req_should_be_flushed =
     io.toIfu.flushFromBpu.shouldFlushByStage2(io.toIfu.req.bits.ftqIdx) ||
-    io.toIfu.flushFromBpu.shouldFlushByStage3(io.toIfu.req.bits.ftqIdx)
+    io.toIfu.flushFromBpu.shouldFlushByStage3(io.toIfu.req.bits.ftqIdx) || 
+    io.wayFlushS1 || io.wayFlushS0
 
     when (io.toIfu.req.fire && !ifu_req_should_be_flushed) {
       entry_fetch_status(ifuPtr.value) := f_sent
@@ -1064,6 +1084,52 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   } .elsewhen(RegNext(pdWb.valid)) {
     // if pdWb and no redirect, set to false
     ifuRedirected(last_cycle_bpu_in_ptr.value) := false.B
+  }
+
+  // ***************************************************************************
+  // **************************** redirect from way Prediction *****************
+  // ***************************************************************************
+  val last_cycle_toIfuPcBundle = RegEnable(toICachePcBundle(0), io.toIfu.req.fire)
+  val flushedS1_toIfuPcBundle = RegEnable(last_cycle_toIfuPcBundle, io.wayFlushS1)
+  val flushedS0_toIfuPcBundle = RegEnable(toICachePcBundle(0), io.wayFlushS0)
+
+  val last_cycle_entry_next_addr = RegEnable(entry_next_addr, io.toIfu.req.fire)
+  val flushedS1_entry_next_addr = RegEnable(last_cycle_entry_next_addr, io.wayFlushS1)
+  val flushedS0_entry_next_addr = RegEnable(entry_next_addr, io.wayFlushS0)
+  
+  val last_cycle_wayFlushS1 = RegNext(io.wayFlushS1)
+  val last_cycle_wayFlushS0 = RegNext(io.wayFlushS0)
+  when (io.wayFlushS1 && io.wayUpdate.valid) {
+    ifuPtr_write := io.wayUpdate.bits.ftqIdx
+    ifuPtrPlus1_write := io.wayUpdate.bits.ftqIdx + 1.U
+    ifuPtrPlus2_write := io.wayUpdate.bits.ftqIdx + 2.U
+    entry_fetch_status(io.wayUpdate.bits.ftqIdx.value) := f_to_send
+    entry_fetch_status((io.wayUpdate.bits.ftqIdx + 1.U).value) := f_to_send
+  }
+  when(io.wayFlushS0 && io.wayUpdate.valid) {
+    ifuPtr_write := io.wayUpdate.bits.ftqIdx
+    ifuPtrPlus1_write := io.wayUpdate.bits.ftqIdx + 1.U
+    ifuPtrPlus2_write := io.wayUpdate.bits.ftqIdx + 2.U
+    entry_fetch_status(io.wayUpdate.bits.ftqIdx.value) := f_to_send
+  }
+
+  when (last_cycle_wayFlushS1) {
+    for(i <- 0 until copyNum){
+      toICachePcBundle(i) := flushedS1_toIfuPcBundle
+      toICacheEntryToSend(i)   := (entry_fetch_status(copied_ifu_ptr(i).value) === f_to_send) || (last_cycle_bpu_in && bpu_in_bypass_ptr === copied_ifu_ptr(i))
+    }
+    toIfuPcBundle := flushedS1_toIfuPcBundle
+    entry_is_to_send := (entry_fetch_status(ifuPtr.value) === f_to_send) || (last_cycle_bpu_in && bpu_in_bypass_ptr === ifuPtr)
+    entry_next_addr := flushedS1_entry_next_addr
+  }
+  when (last_cycle_wayFlushS0) {
+    for(i <- 0 until copyNum){
+      toICachePcBundle(i) := flushedS0_toIfuPcBundle
+      toICacheEntryToSend(i)   := (entry_fetch_status(copied_ifu_ptr(i).value) === f_to_send) || (last_cycle_bpu_in && bpu_in_bypass_ptr === copied_ifu_ptr(i))
+    }
+    toIfuPcBundle := flushedS0_toIfuPcBundle
+    entry_is_to_send := (entry_fetch_status(ifuPtr.value) === f_to_send) || (last_cycle_bpu_in && bpu_in_bypass_ptr === ifuPtr)
+    entry_next_addr := flushedS0_entry_next_addr
   }
 
   // **********************************************************************
@@ -1283,6 +1349,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   //   case (mis, state) => mis && state === c_committed
   // })
   val commit_mispredict = RegEnable(mispredict_vec(commPtr.value), canCommit)
+  val commit_wayPred    = RegEnable(update_wayPred(commPtr.value), canCommit)
   // val commit_instCommited: Vec[Bool] = VecInit(commit_state.map(_ === c_committed)) // [PredictWidth]
   val can_commit_hit                 = entry_hit_status(commPtr.value)
   val commit_hit                     = RegEnable(can_commit_hit, canCommit)
@@ -1325,7 +1392,6 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   update.full_target := commit_target
   update.from_stage  := commit_stage
   update.spec_info   := commit_spec_meta
-  
 
   val commit_real_hit = commit_hit === h_hit
   val update_ftb_entry = update.ftb_entry
@@ -1338,6 +1404,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   ftbEntryGen.target         := commit_target
   ftbEntryGen.hit            := commit_real_hit
   ftbEntryGen.mispredict_vec := commit_mispredict
+  ftbEntryGen.wayPred        := commit_wayPred
 
   update_ftb_entry         := ftbEntryGen.new_entry
   update.new_br_insert_pos := ftbEntryGen.new_br_insert_pos

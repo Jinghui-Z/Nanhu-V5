@@ -200,6 +200,8 @@ class FTBEntry(implicit p: Parameters) extends FTBEntry_part with FTBParams with
   val last_may_be_rvi_call = Bool()
 
   val always_taken = Vec(numBr, Bool())
+  // way prediction res
+  val wayPred       = Vec(ICacheParameters().PortNumber, Valid(UInt(log2Up(ICacheParameters().nWays).W)))
 
   def getSlotForBr(idx: Int): FtbSlot = {
     require(idx <= numBr-1)

@@ -39,6 +39,7 @@ class IPrefetchReq(implicit p: Parameters) extends IPrefetchBundle {
   val nextlineStart : UInt   = UInt(VAddrBits.W)
   val ftqIdx        : FtqPtr = new FtqPtr
   val isSoftPrefetch: Bool   = Bool()
+  val wayPred        = Vec(ICacheParameters().PortNumber, Valid(UInt(log2Up(ICacheParameters().nWays).W)))
   def crossCacheline: Bool   = startAddr(blockOffBits - 1) === 1.U
 
   def fromFtqICacheInfo(info: FtqICacheInfo): IPrefetchReq = {
@@ -46,6 +47,7 @@ class IPrefetchReq(implicit p: Parameters) extends IPrefetchBundle {
     this.nextlineStart := info.nextlineStart
     this.ftqIdx := info.ftqIdx
     this.isSoftPrefetch := false.B
+    this.wayPred        := info.wayPred
     this
   }
 
@@ -71,7 +73,8 @@ class IPrefetchIO(implicit p: Parameters) extends IPrefetchBundle {
   val metaRead          = new ICacheMetaReqBundle
   val MSHRReq           = DecoupledIO(new ICacheMissReq)
   val MSHRResp          = Flipped(ValidIO(new ICacheMissResp))
-  val wayLookupWrite    = DecoupledIO(new WayLookupInfo)
+  val wayLookupWrite    = DecoupledIO(new WriteWayLookupInfo)
+  val wayPredWrite      = DecoupledIO(new WayLookupInfo)
 }
 
 class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
@@ -83,6 +86,7 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
   val (toMeta,  fromMeta) = (io.metaRead.toIMeta,  io.metaRead.fromIMeta)
   val (toMSHR, fromMSHR)  = (io.MSHRReq, io.MSHRResp)
   val toWayLookup = io.wayLookupWrite
+  val toWayPred   = io.wayPredWrite
 
   val s0_fire, s1_fire, s2_fire             = WireInit(false.B)
   val s0_discard, s2_discard                = WireInit(false.B)
@@ -110,15 +114,51 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
   val s0_isSoftPrefetch = io.req.bits.isSoftPrefetch
   val s0_doubleline   = io.req.bits.crossCacheline
   val s0_req_vSetIdx  = s0_req_vaddr.map(get_idx)
+  val s0_wayPred          = io.req.bits.wayPred
+  val s0_waymasksPred     = VecInit(s0_wayPred.map{pred => Mux(pred.valid, UIntToOH(pred.bits), 0.U(nWays.W))}) 
 
   from_bpu_s0_flush := !s0_isSoftPrefetch && (io.flushFromBpu.shouldFlushByStage2(s0_req_ftqIdx) ||
                                               io.flushFromBpu.shouldFlushByStage3(s0_req_ftqIdx))
   s0_flush := io.flush || from_bpu_s0_flush || s1_flush
 
-  val s0_can_go = s1_ready && toITLB(0).ready && toITLB(1).ready && toMeta.ready
+  val s0_idle :: s0_waitPredWriteReady :: Nil = Enum(2)
+  val s0_state = RegInit(s0_idle)
+  val s0_next_state = WireDefault(s0_state)
+  dontTouch(s0_state)
+  dontTouch(s0_next_state)
+  s0_state := s0_next_state
+  switch(s0_state) {
+    is(s0_idle) {
+      when(toWayPred.valid) {
+        when(toWayPred.ready) {
+          s0_next_state := s0_idle
+        }.otherwise {  // itlb_finish 
+          s0_next_state := s0_waitPredWriteReady
+        }
+      }
+    }
+    is(s0_waitPredWriteReady) {
+      when(toWayPred.ready) {
+        s0_next_state := s0_idle
+      }.otherwise{
+        s0_next_state := s0_waitPredWriteReady
+      } 
+    }
+  }
+  when(s0_flush) {
+    s0_next_state := s0_idle
+  }
+  val s0_can_go = s1_ready && toITLB(0).ready && toITLB(1).ready && toMeta.ready && (s0_next_state === s0_idle)
   io.req.ready := s0_can_go
 
   s0_fire := s0_valid && s0_can_go && !s0_flush
+
+  toWayPred.valid  := io.req.valid && !s0_flush && s1_ready && toITLB(0).ready && toITLB(1).ready && toMeta.ready 
+  toWayPred.bits.vSetIdx      := s0_req_vSetIdx
+  toWayPred.bits.waymask      := s0_waymasksPred
+  toWayPred.bits.ptag         := DontCare
+  toWayPred.bits.ftqIdx       := s0_req_ftqIdx
+  toWayPred.bits.valid        := false.B
 
   /**
     ******************************************************************************
@@ -203,7 +243,7 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
   val s1_itlb_pbmt          = VecInit((0 until PortNumber).map( i =>
     ResultHoldBypass(valid = tlb_valid_pulse(i), init = 0.U.asTypeOf(fromITLB(i).bits.pbmt(0)), data = fromITLB(i).bits.pbmt(0))
   ))
-  val s1_itlb_exception_gpf = VecInit(s1_itlb_exception.map(_ === ExceptionType.gpf))
+  // val s1_itlb_exception_gpf = VecInit(s1_itlb_exception.map(_ === ExceptionType.gpf))
 
   /* Select gpaddr with the first gpf
    * Note: the backend wants the base guest physical address of a fetch block
@@ -211,15 +251,15 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
    *       see GPAMem: https://github.com/OpenXiangShan/XiangShan/blob/344cf5d55568dd40cd658a9ee66047a505eeb504/src/main/scala/xiangshan/backend/GPAMem.scala#L33-L34
    *       see also: https://github.com/OpenXiangShan/XiangShan/blob/344cf5d55568dd40cd658a9ee66047a505eeb504/src/main/scala/xiangshan/frontend/IFU.scala#L374-L375
    */
-  val s1_req_gpaddr = PriorityMuxDefault(
-    s1_itlb_exception_gpf zip (0 until PortNumber).map(i => s1_req_gpaddr_tmp(i) - (i << blockOffBits).U),
-    0.U.asTypeOf(s1_req_gpaddr_tmp(0))
-  )
+  // val s1_req_gpaddr = PriorityMuxDefault(
+  //   s1_itlb_exception_gpf zip (0 until PortNumber).map(i => s1_req_gpaddr_tmp(i) - (i << blockOffBits).U),
+  //   0.U.asTypeOf(s1_req_gpaddr_tmp(0))
+  // )
 
-  val s1_req_isForVSnonLeafPTE = PriorityMuxDefault(
-    s1_itlb_exception_gpf zip s1_req_isForVSnonLeafPTE_tmp,
-    0.U.asTypeOf(s1_req_isForVSnonLeafPTE_tmp(0))
-  )
+  // val s1_req_isForVSnonLeafPTE = PriorityMuxDefault(
+  //   s1_itlb_exception_gpf zip s1_req_isForVSnonLeafPTE_tmp,
+  //   0.U.asTypeOf(s1_req_isForVSnonLeafPTE_tmp(0))
+  // )
 
   /**
     ******************************************************************************
@@ -328,15 +368,9 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
   toWayLookup.bits.vSetIdx      := s1_req_vSetIdx
   toWayLookup.bits.waymask      := s1_waymasks
   toWayLookup.bits.ptag         := s1_req_ptags
-  toWayLookup.bits.gpaddr       := s1_req_gpaddr
-  toWayLookup.bits.isForVSnonLeafPTE      := s1_req_isForVSnonLeafPTE
-  toWayLookup.bits.meta_codes   := s1_meta_codes
-  (0 until PortNumber).foreach { i =>
-    val excpValid = (if (i == 0) true.B else s1_doubleline)  // exception in first line is always valid, in second line is valid iff is doubleline request
-    // Send s1_itlb_exception to WayLookup (instead of s1_exception_out) for better timing. Will check pmp again in mainPipe
-    toWayLookup.bits.itlb_exception(i) := Mux(excpValid, s1_itlb_exception(i), ExceptionType.none)
-    toWayLookup.bits.itlb_pbmt(i)      := Mux(excpValid, s1_itlb_pbmt(i), Pbmt.pma)
-  }
+  toWayLookup.bits.ftqIdx       := s1_req_ftqIdx
+  toWayLookup.bits.valid        := true.B
+  toWayLookup.bits.isDoubleLine := s1_doubleline
 
   val s1_waymasks_vec = s1_waymasks.map(_.asTypeOf(Vec(nWays, Bool())))
   when(toWayLookup.fire) {
