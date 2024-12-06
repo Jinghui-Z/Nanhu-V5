@@ -24,6 +24,7 @@ import xiangshan._
 import xiangshan.frontend.icache._
 import xiangshan.backend.CtrlToFtqIO
 import xiangshan.backend.decode.ImmUnion
+import xiangshan.frontend.icache.{ICacheParameters, WayUpdateInfo}
 import xs.utils._
 import xs.utils.sram._
 import xs.utils.perf._

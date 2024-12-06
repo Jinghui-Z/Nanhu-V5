@@ -364,7 +364,8 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
     */
   // Disallow enqueuing wayLookup when SRAM write occurs.
   toWayLookup.valid             := ((state === m_enqWay) || ((state === m_idle) && itlb_finish)) &&
-    !s1_flush && !fromMSHR.valid && !s1_isSoftPrefetch  // do not enqueue soft prefetch
+  !s1_flush && !s1_isSoftPrefetch                     // do not enqueue soft prefetch
+    // !s1_flush && !fromMSHR.valid && !s1_isSoftPrefetch  
   toWayLookup.bits.vSetIdx      := s1_req_vSetIdx
   toWayLookup.bits.waymask      := s1_waymasks
   toWayLookup.bits.ptag         := s1_req_ptags

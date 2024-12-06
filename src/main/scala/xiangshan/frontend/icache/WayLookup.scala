@@ -130,7 +130,7 @@ class WayLookup(implicit p: Parameters) extends ICacheModule {
     readPtr := readPtr + 1.U
   }
 
-  when(io.wayFlushS1 || io.wayFlushS0 || (!wayFLushedFir && !wayFLushedSec && pred_full && io.write.fire && !(io.write.bits.entry.ftqIdx > io.readFtqIdx))) {  // update readPtr if flush or pred_full, otherwise prefetch will stop
+  when(io.wayFlushS1 || io.wayFlushS0) { 
     readPtr := writePtr
   }
 
@@ -234,10 +234,9 @@ class WayLookup(implicit p: Parameters) extends ICacheModule {
         wayFLushedSec := true.B
         io.wayFlushS0 := true.B
       }
+    }.elsewhen(!wayFLushedFir && !wayFLushedSec && !(io.write.bits.entry.ftqIdx > io.readFtqIdx)) {  // update readPtr if pred right, otherwise will reduce the space of Waylookup
+      readPtr := writePtr
     }
-    // }.elsewhen(!wayFLushedFir && !wayFLushedSec && !(io.write.bits.entry.ftqIdx > io.readFtqIdx)) {  // update readPtr if pred right, otherwise will reduce the space of Waylookup
-    //   readPtr := writePtr
-    // }
     entries(writePtr.value) := io.write.bits.entry
   }
 
