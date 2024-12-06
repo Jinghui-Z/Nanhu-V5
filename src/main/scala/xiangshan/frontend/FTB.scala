@@ -25,6 +25,7 @@ import xs.utils._
 import xs.utils.perf._
 import xs.utils.sram._
 import xs.utils.mbist.MbistPipeline
+import xiangshan.frontend.icache.ICacheParameters
 
 import scala.math.min
 import scala.{Tuple2 => &}
