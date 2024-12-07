@@ -289,11 +289,13 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
       }
     }
     is(m_itlbResend) {
-      when(!s2_ready) {
-        next_state := m_enterS2
-      }.otherwise{
-        next_state := m_idle
-      } 
+      when(itlb_finish) { 
+        when(!s2_ready) {
+          next_state := m_enterS2
+        }.otherwise{
+          next_state := m_idle
+        } 
+      }  
     }
     is(m_enterS2) {
       when(s2_ready) {
@@ -416,7 +418,7 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
                           s1_valid && (s1_MSHR_match(1) && s1_doubleline))
   val s1_MSHR_datas = fromMSHR.bits.data.asTypeOf(Vec(ICacheDataBanks, UInt((blockBits/ICacheDataBanks).W)))
 
-  val s1_hits = (0 until PortNumber).map(i => ValidHoldBypass(s1_MSHR_hits(i) || (RegNext(s0_fire) && s1_SRAMhits(i)), s1_fire || s1_flush))
+  val s1_hits = (0 until PortNumber).map(i => ValidHoldBypass(s1_MSHR_hits(i), s1_fire || s1_flush) || s1_SRAMhits(i))
 
   val s1_bankIdxLow  = s1_req_offset >> log2Ceil(blockBytes/ICacheDataBanks)
   val s1_bankMSHRHit = VecInit((0 until ICacheDataBanks).map(i => (i.U >= s1_bankIdxLow) && s1_MSHR_hits(0) ||
@@ -427,7 +429,7 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
 
   from_bpu_s1_flush := s1_valid && io.fetch.flushFromBpu.shouldFlushByStage3(s1_req_ftqIdx)
   s1_flush := io.flush || io.wayFlushS1 || from_bpu_s1_flush
-  s1_ready := s2_ready || !s1_valid
+  s1_ready := (s2_ready || !s1_valid) && (next_state === m_idle)
   s1_fire  := s1_valid && s2_ready && !s1_flush && (next_state === m_idle)
 
   /**
