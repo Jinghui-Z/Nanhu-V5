@@ -470,7 +470,8 @@ class ICacheIO(implicit p: Parameters) extends ICacheBundle
   val softPrefetch = Vec(backendParams.LduCnt, Flipped(Valid(new SoftIfetchPrefetchBundle)))
   val stop        = Input(Bool())
   val fetch       = new ICacheMainPipeBundle
-  val toIFU       = Output(Bool())
+  val toIFU         = Output(Bool())
+  val icacheS1Ready = Output(Bool())
   val pmp         = Vec(2 * PortNumber, new ICachePMPBundle)
   val itlb        = Vec(2 * PortNumber, new TlbRequestIO)
   val perfInfo    = Output(new ICachePerfInfo)
@@ -610,7 +611,8 @@ class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParame
   io.itlb(3) <> mainPipe.io.itlb(1)
 
   //notify IFU that Icache pipeline is available
-  io.toIFU        := mainPipe.io.fetch.req.ready
+  io.toIFU          := mainPipe.io.fetch.req.ready
+  io.icacheS1Ready  := mainPipe.io.icacheS1Ready
   io.perfInfo     := mainPipe.io.perfInfo
   io.wayFlushS0   := wayLookup.io.wayFlushS0 
   io.wayFlushS1   := wayLookup.io.wayFlushS1 

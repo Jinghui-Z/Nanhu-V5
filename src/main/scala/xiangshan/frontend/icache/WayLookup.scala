@@ -105,9 +105,7 @@ class WayLookup(implicit p: Parameters) extends ICacheModule {
     pre_predWritePtr := 0.U.asTypeOf(new WayLookupPtr)
   }.elsewhen(io.predWrite.fire) {
     predWritePtr := predWritePtr + 1.U
-    when(!pred_empty) {
-      pre_predWritePtr := predWritePtr
-    }
+    pre_predWritePtr := predWritePtr
   }.elsewhen(io.flushFromBpu.shouldFlushByStage3(entries(pre_predWritePtr.value).ftqIdx) && !pred_empty) {
     predWritePtr := pre_predWritePtr
   }

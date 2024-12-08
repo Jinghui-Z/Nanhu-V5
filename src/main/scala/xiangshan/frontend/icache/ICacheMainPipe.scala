@@ -117,6 +117,7 @@ class ICacheMainPipeInterface(implicit p: Parameters) extends ICacheBundle {
   val wayFlushS0 = Input(Bool())
   val wayFlushS1 = Input(Bool())
   val readFtqIdx = Output(new FtqPtr)
+  val icacheS1Ready = Output(Bool())
 
   val perfInfo = Output(new ICachePerfInfo)
 }
@@ -244,12 +245,13 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
   val s1_excp_fromBackend = RegEnable(s0_excp_fromBackend, false.B,                        s0_fire)
   // val s1_itlb_pbmt        = RegEnable(s0_itlb_pbmt,        0.U.asTypeOf(s0_itlb_pbmt),     s0_fire)
   val s1_waymasks         = RegEnable(s0_waymasks,        0.U.asTypeOf(s0_waymasks),      s0_fire)
+  val s1_wayIsPred        = RegEnable(!fromWayLookup.valid, false.B,                      s0_fire)
   // val s1_meta_codes       = RegEnable(s0_meta_codes,       0.U.asTypeOf(s0_meta_codes),    s0_fire)
 
   val s1_req_vSetIdx  = s1_req_vaddr.map(get_idx)
   // val s1_req_paddr    = s1_req_vaddr.zip(s1_req_ptags).map{case(vaddr, ptag) => get_paddr_from_ptag(vaddr, ptag)}
 
-  val m_idle :: m_itlbResend :: m_enterS2 :: Nil = Enum(3)
+  val m_idle :: m_itlbResend :: m_waitDeqWay:: m_enterS2 :: Nil = Enum(4)
   val state = RegInit(m_idle)
   val next_state = WireDefault(state)
   dontTouch(state)
@@ -290,12 +292,23 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
     }
     is(m_itlbResend) {
       when(itlb_finish) { 
-        when(!s2_ready) {
+        when(s1_wayIsPred) {
+          next_state := m_waitDeqWay
+        }.otherwise{
+          when(!s2_ready) {
+            next_state := m_enterS2
+          }.otherwise {
+            next_state := m_idle
+          }
+        }
+      }  
+    }
+    is(m_waitDeqWay) {
+       when(!s2_ready) {
           next_state := m_enterS2
         }.otherwise{
           next_state := m_idle
         } 
-      }  
     }
     is(m_enterS2) {
       when(s2_ready) {
@@ -431,6 +444,7 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
   s1_flush := io.flush || io.wayFlushS1 || from_bpu_s1_flush
   s1_ready := (s2_ready || !s1_valid) && (next_state === m_idle)
   s1_fire  := s1_valid && s2_ready && !s1_flush && (next_state === m_idle)
+  io.icacheS1Ready := s2_ready && (next_state === m_idle)
 
   /**
     ******************************************************************************

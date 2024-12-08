@@ -302,7 +302,7 @@ class NewIFU(implicit p: Parameters) extends XSModule
   // val f1_situation  = RegEnable(f0_situation,  f0_fire)
   val f1_doubleLine = RegEnable(f0_doubleLine, f0_fire)
   val f1_vSetIdx    = RegEnable(f0_vSetIdx,    f0_fire)
-  val f1_fire       = f1_valid && f2_ready
+  val f1_fire       = f1_valid && f2_ready && io.icacheInter.icacheS1Ready
 
   f1_ready := f1_fire || !f1_valid
 
