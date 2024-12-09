@@ -210,11 +210,11 @@ class WayLookup(implicit p: Parameters) extends ICacheModule {
     io.wayUpdate.bits.wayPred(i).valid  := hit
     io.wayUpdate.bits.wayPred(i).bits   := Mux(hit, OHToUInt(io.write.bits.entry.waymask(i)), 0.U(log2Up(nWays).W))
   }
-  // when(io.write.fire && way_diff_vec.reduce(_ || _)) {
-  //   io.wayUpdate.valid := true.B
-  // }
-  // val way_diff = way_diff_vec(0) || (way_diff_vec(1) && io.write.bits.isDoubleLine)
-  val way_diff = way_diff_vec.reduce(_ || _)
+  when(io.write.fire && way_diff_vec.reduce(_ || _)) {
+    io.wayUpdate.valid := true.B
+  }
+  val way_diff = way_diff_vec(0) || (way_diff_vec(1) && io.write.bits.isDoubleLine)
+  // val way_diff = way_diff_vec.reduce(_ || _)
   io.wayFlushS0 := false.B
   io.wayFlushS1 := false.B
   io.wayUpdate.valid := false.B
