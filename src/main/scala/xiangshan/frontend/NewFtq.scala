@@ -769,7 +769,7 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
   XSError(isBefore(bpuPtr, ifuPtr) && !isFull(bpuPtr, ifuPtr), "\nifuPtr is before bpuPtr!\n")
   XSError(isBefore(bpuPtr, pfPtr) && !isFull(bpuPtr, pfPtr), "\npfPtr is before bpuPtr!\n")
   XSError(isBefore(ifuWbPtr, commPtr) && !isFull(ifuWbPtr, commPtr), "\ncommPtr is before ifuWbPtr!\n")
-  XSError(isBefore(pfPtr, ifuPtr) && !isFull(pfPtr, ifuPtr), "\npfPtr is before ifuPtr!\n")
+  // XSError(isBefore(pfPtr, ifuPtr) && !isFull(pfPtr, ifuPtr), "\npfPtr is before ifuPtr!\n")
 
   (0 until copyNum).map{i =>
     XSError(copied_bpu_ptr(i) =/= bpuPtr, "\ncopiedBpuPtr is different from bpuPtr!\n")
@@ -870,12 +870,12 @@ class Ftq(implicit p: Parameters) extends XSModule with HasCircularQueuePtrHelpe
                             RegNext(ftq_pc_mem.io.ifuPtrPlus1_rdata.startAddr))) // ifuPtr+1
   }
 
-  io.toIfu.req.valid := entry_is_to_send && ifuPtr =/= bpuPtr
+  io.toIfu.req.valid := entry_is_to_send && ifuPtr =/= bpuPtr && (isBefore(ifuPtr, pfPtr) || (ifuPtr === pfPtr && io.toPrefetch.req.fire && allowToIfu))
   io.toIfu.req.bits.nextStartAddr := entry_next_addr
   io.toIfu.req.bits.ftqOffset := entry_ftq_offset
   io.toIfu.req.bits.fromFtqPcBundle(toIfuPcBundle)
 
-  io.toICache.req.valid := entry_is_to_send && ifuPtr =/= bpuPtr
+  io.toICache.req.valid := entry_is_to_send && ifuPtr =/= bpuPtr && (isBefore(ifuPtr, pfPtr) || (ifuPtr === pfPtr && io.toPrefetch.req.fire && allowToIfu))
   io.toICache.req.bits.readValid.zipWithIndex.map{case(copy, i) => copy := toICacheEntryToSend(i) && copied_ifu_ptr(i) =/= copied_bpu_ptr(i)}
   io.toICache.req.bits.pcMemRead.zipWithIndex.foreach{case(copy,i) =>
     copy.fromFtqPcBundle(toICachePcBundle(i))

@@ -75,6 +75,8 @@ class IPrefetchIO(implicit p: Parameters) extends IPrefetchBundle {
   val MSHRResp          = Flipped(ValidIO(new ICacheMissResp))
   val wayLookupWrite    = DecoupledIO(new WriteWayLookupInfo)
   val wayPredWrite      = DecoupledIO(new WayLookupInfo)
+  val iPreFetchS1Ready  = Output(Bool())
+  val iPrefetchS1FtqIdx = Output(new FtqPtr)
 }
 
 class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
@@ -467,6 +469,9 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
   s1_ready      := next_state === m_idle
   s1_fire       := (next_state === m_idle) && s1_valid && !s1_flush  // used to clear s1_valid & itlb_valid_latch
   val s1_real_fire = s1_fire && io.csr_pf_enable                     // real "s1 fire" that s1 enters s2
+
+  io.iPreFetchS1Ready := next_state === m_idle
+  io.iPrefetchS1FtqIdx := s1_req_ftqIdx
 
   /**
     ******************************************************************************

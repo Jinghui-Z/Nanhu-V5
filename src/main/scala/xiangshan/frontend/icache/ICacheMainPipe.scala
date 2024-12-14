@@ -118,6 +118,8 @@ class ICacheMainPipeInterface(implicit p: Parameters) extends ICacheBundle {
   val wayFlushS1 = Input(Bool())
   val readFtqIdx = Output(new FtqPtr)
   val icacheS1Ready = Output(Bool())
+  val iPreFetchS1Ready  = Input(Bool())
+  val iPrefetchS1FtqIdx = Input(new FtqPtr)
 
   val perfInfo = Output(new ICachePerfInfo)
 }
@@ -442,9 +444,9 @@ class ICacheMainPipe(implicit p: Parameters) extends ICacheModule
 
   from_bpu_s1_flush := s1_valid && io.fetch.flushFromBpu.shouldFlushByStage3(s1_req_ftqIdx)
   s1_flush := io.flush || io.wayFlushS1 || from_bpu_s1_flush
-  s1_ready := (s2_ready || !s1_valid) && (next_state === m_idle)
-  s1_fire  := s1_valid && s2_ready && !s1_flush && (next_state === m_idle)
-  io.icacheS1Ready := s2_ready && (next_state === m_idle)
+  s1_ready := (s2_ready || !s1_valid) && (next_state === m_idle) && (((s1_req_ftqIdx === io.iPrefetchS1FtqIdx) && io.iPreFetchS1Ready) || (s1_req_ftqIdx < io.iPrefetchS1FtqIdx))
+  s1_fire  := s1_valid && s2_ready && !s1_flush && (next_state === m_idle) && (((s1_req_ftqIdx === io.iPrefetchS1FtqIdx) && io.iPreFetchS1Ready) || (s1_req_ftqIdx < io.iPrefetchS1FtqIdx))
+  io.icacheS1Ready := s2_ready && (next_state === m_idle) && (((s1_req_ftqIdx === io.iPrefetchS1FtqIdx) && io.iPreFetchS1Ready) || (s1_req_ftqIdx < io.iPrefetchS1FtqIdx))
 
   /**
     ******************************************************************************
