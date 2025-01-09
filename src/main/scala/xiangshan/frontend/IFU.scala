@@ -89,6 +89,7 @@ class NewIFUIO(implicit p: Parameters) extends XSBundle {
 // the middle of an RVI inst
 class LastHalfInfo(implicit p: Parameters) extends XSBundle {
   val valid = Bool()
+  val valid_dup = Bool()
   val middlePC = UInt(VAddrBits.W)
   def matchThisBlock(startAddr: UInt) = valid && middlePC === startAddr
 }
@@ -802,13 +803,22 @@ class NewIFU(implicit p: Parameters) extends XSModule
   }
 
   when (f3_flush) {
-    f3_lastHalf.valid := false.B
+    f3_lastHalf.valid     := false.B
+    f3_lastHalf.valid_dup := false.B
   }.elsewhen (f3_fire) {
-    f3_lastHalf.valid := f3_hasLastHalf && !f3_lastHalf_disable
-    f3_lastHalf.middlePC := f3_ftq_req.nextStartAddr
+    f3_lastHalf.valid     := f3_hasLastHalf && !f3_lastHalf_disable
+    f3_lastHalf.valid_dup := f3_hasLastHalf && !f3_lastHalf_disable
+    f3_lastHalf.middlePC  := f3_ftq_req.nextStartAddr
   }
 
-  f3_instr_valid := Mux(f3_lastHalf.valid,f3_hasHalfValid ,VecInit(f3_pd.map(inst => inst.valid)))
+  for (i <- 0 until PredictWidth) {
+    if (i < (PredictWidth / 2)) {
+      f3_instr_valid(i) := Mux(f3_lastHalf.valid,     f3_hasHalfValid(i), f3_pd(i).valid)
+    } else {
+      f3_instr_valid(i) := Mux(f3_lastHalf.valid_dup, f3_hasHalfValid(i), f3_pd(i).valid)
+    }
+  }
+  // f3_instr_valid := Mux(f3_lastHalf.valid, f3_hasHalfValid ,VecInit(f3_pd.map(inst => inst.valid)))
 
   /*** frontend Trigger  ***/
   frontendTrigger.io.pds  := f3_pd
@@ -978,6 +988,7 @@ class NewIFU(implicit p: Parameters) extends XSModule
         && wb_check_result_stage2.fixedMissPred(PredictWidth - 1) && f3_fire
       ){
     f3_lastHalf.valid := false.B
+    f3_lastHalf.valid_dup := false.B
   }
 
   val checkFlushWb = Wire(Valid(new PredecodeWritebackBundle))
